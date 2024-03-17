@@ -2,7 +2,7 @@
 
 ## Description
 A calculator for simulating financial decisions and comparing different options and projecting future outcomes. Mainly for comparing differing housing options such as buying or renting and allowing one to incorporate as many variables as possible to make the most informed decision. 
-
+![Example pic](pictures/example_graph.png)
 
 ## Installation
 
