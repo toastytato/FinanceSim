@@ -6,16 +6,19 @@ from pprint import pprint
 
 if __name__ == "__main__":
 
-    # ------------
-    move_in = 3
-    stay_duration = 20
+    # ---- Homeowner Scenario Setup ------------
+    move_in = 3  # in months since start (sim starts at month 1)
+    stay_duration = 20  # in months
     homeowner = Scenario("Owning")
-    homeowner.create_ledgers(
+    homeowner.create_ledgers(  # create ledgers to keep track of states
         "cash",
         "home_loan",
         "fam_loan",
         "house_val",
     )
+    # Include transactions of interest
+    # able to just delete or add in transactions pertaining to your scenario
+    # you can also add in more presets. See transaction_presets.py for the format
     homeowner.add_transactions(
         tr.get_loan(  # home loan
             cash_ledger=homeowner.ledgers["cash"],
@@ -62,7 +65,7 @@ if __name__ == "__main__":
         )
     )
 
-    # ------------
+    # ----- Rental Scenario-------
     renter = Scenario("Renting")
     renter.create_ledgers("cash")
     renter.add_transactions(
@@ -75,14 +78,18 @@ if __name__ == "__main__":
         )
     )
 
+    # ---- View transactions that will be processed ----
     pprint(homeowner.all_transactions)
     pprint(renter.all_transactions)
 
+    # --- Simulate ---
     sim_months = 30
     homeowner.simulate(sim_months)
     renter.simulate(sim_months)
 
+    # --- View results in tabular format ---
     pprint(homeowner.ledgers["cash"].ledger)
     pprint(homeowner.results)
 
+    # --- View results in graphical format ---
     vis.visualize_df(homeowner.results, renter.results)

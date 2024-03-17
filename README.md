@@ -13,3 +13,4 @@ cd FinanceSim
 
 ## Usage
 View 'main examply.py' for an example of how to use the calculator.
+
