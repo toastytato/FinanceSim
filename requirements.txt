@@ -3,7 +3,6 @@ google-generativeai
 plotly
 pandas
 langchain_google_genai
-json
 typing
 heapq
 dateutil
