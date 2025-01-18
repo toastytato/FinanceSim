@@ -218,7 +218,7 @@ def main():
     )
     with st.sidebar:
         st.title("Settings")
-        default = private.google_api_key if IN_DEBUG else None
+        default = st.secrets["google_api_key"]
         google_api_key = st.text_input("Google API Key", type="password", value=default)
         st.markdown(
             "To get a Google API Key, visit the [Google AI Studio](https://aistudio.google.com)."
