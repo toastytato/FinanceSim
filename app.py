@@ -235,7 +235,7 @@ def main():
         default = private.google_api_key if IN_DEBUG else None
         google_api_key = st.text_input("Google API Key", type="password", value=default)
         st.markdown(
-            "To get a Google API Key, visit the [Google AI Studio](https://studio.ai.google.com/)."
+            "To get a Google API Key, visit the [Google AI Studio](https://aistudio.google.com)."
         )
 
         if google_api_key:
