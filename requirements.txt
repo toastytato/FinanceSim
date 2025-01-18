@@ -4,7 +4,6 @@ plotly
 pandas
 langchain_google_genai
 typing
-heapq
 dateutil
 datetime
 numpy
