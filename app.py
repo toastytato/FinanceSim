@@ -8,9 +8,10 @@ import pandas as pd
 from premade_actions import *
 from sim_framework import *
 
-IN_DEBUG = False
+IN_DEBUG = st.secrets.get("USE_DEBUG", False)
+IS_LOCAL = st.secrets.get("IS_LOCAL", False)
 
-if IN_DEBUG:
+if IS_LOCAL:
     import private
 
 # Possible future change once you get the beta version out
@@ -177,6 +178,8 @@ system_prompt = f"""
 10. Do not shorten the final JSON. Every response should give the full JSON needed to simulate the user's request
 """
 
+initiate_welcome_prompt = "Now that you have the instructions, a user has just joined. Welcome them in and explain what this tool is for and what it's capable of"
+
 
 def parse_json(text: str) -> tuple[bool, dict]:
     """Extract content between triple backticks and parse as JSON.
@@ -218,7 +221,7 @@ def main():
     )
     with st.sidebar:
         st.title("Settings")
-        default = st.secrets.get("google_api_key", None)
+        default = st.secrets.get("google_api_key", None) if IS_LOCAL else None
         google_api_key = st.text_input("Google API Key", type="password", value=default)
         st.markdown(
             "To get a Google API Key, visit the [Google AI Studio](https://aistudio.google.com)."
@@ -233,7 +236,7 @@ def main():
             st.success("API Key updated successfully!")
             if not st.session_state.messages:
                 response = st.session_state.model.invoke(
-                    system_prompt + "JUST CONFIRM YOU UNDERSTAND, DO NOT GIVE JSON"
+                    system_prompt + initiate_welcome_prompt
                 ).content
                 st.session_state.messages.append(
                     {"role": "system", "content": system_prompt}
@@ -249,7 +252,8 @@ def main():
 
         # Display chat history in scrollable container
         with chat_container:
-            for message in st.session_state.messages:
+            start_msg_idx = 0 if IN_DEBUG else 1
+            for message in st.session_state.messages[start_msg_idx:]:
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
 
@@ -291,21 +295,19 @@ def main():
 
     # Right column always shows the latest JSON data if available
     with right_col:
-        config_data_tab, plot_tab, df_output_tab = st.tabs(
-            ["Config Data", "Plot", "DF Output"]
-        )
+        plot_tab, config_data_tab = st.tabs(["Plot", "Config Data"])
 
         with plot_tab:
             st.subheader("Plot")
             try:
                 # Sim Debug configs
-                if IN_DEBUG:
+                if IN_DEBUG and IS_LOCAL:
                     data = private.my_scenario
                     st.session_state.sim_config = data
                     st.session_state.sims = Sim.get_sims_from_config(data)
 
-                for sim in st.session_state.sims:
-                    sim.run()
+                    for sim in st.session_state.sims:
+                        sim.run()
                 if "sims" in st.session_state and st.session_state.sims is not None:
                     sim_options = [sim.name for sim in st.session_state.sims]
                     sel_sim_names = st.multiselect(
