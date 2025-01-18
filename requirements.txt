@@ -1,0 +1,5 @@
+streamlit
+google-generativeai
+plotly
+pandas
+langchain_google_genai

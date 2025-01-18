@@ -1,8 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import SystemMessage
-from langchain_community.chat_message_histories import StreamlitChatMessageHistory
 import private
 import time
 import json
@@ -306,109 +304,12 @@ def main():
             st.subheader("Plot")
             try:
                 # Sim Debug configs
-                data = {
-                    "scenarios": {
-                        "HousePurchaseWithRefinance": {
-                            "account_names": {
-                                "myself": 0,
-                                "mortgage": 0,
-                                "house": 0,
-                                "family_debt": 0,
-                            },
-                            "variables": {
-                                "loan_rate_apr": 0.075,
-                                "fam_rate_apr": 0.04,
-                            },
-                            "actions": [
-                                {
-                                    "function": "add2sim_get_loan",
-                                    "kwargs": {
-                                        "borrower_account_name": "myself",
-                                        "lender_account_name": "family",
-                                        "debt_account_name": "family_debt",
-                                        "loan_name": "family",
-                                        "loan_amount": 100e3,
-                                        "loan_rate": "fam_rate_apr",
-                                        "monthly_payment": 500,
-                                        "start_date": "01/01/2024",
-                                        "end_date": "01/01/2030",
-                                    },
-                                },
-                                {
-                                    "function": "add2sim_buy_house",
-                                    "kwargs": {
-                                        "mortgage_account_name": "mortgage",
-                                        "lender_account_name": "bank",
-                                        "buyer_account_name": "myself",
-                                        "market_account_name": "housing_market",
-                                        "house_val_account_name": "house",
-                                        "loan_rate": "loan_rate_apr",
-                                        "appreciation_rate": 0.08,
-                                        "house_price": 350e3,
-                                        "downpayment": 100e3,
-                                        "buy_closing_cost": 5000,
-                                        "mortgage": 1500,
-                                        "buy_date": "01/01/2024",
-                                        "end_date": "01/01/2030",
-                                    },
-                                },
-                                {
-                                    "function": "add2sim_modify_variable",
-                                    "kwargs": {
-                                        "variable_name": "loan_rate_apr",
-                                        "new_value": 0.06,
-                                        "modification_date": "01/01/2026",
-                                    },
-                                },
-                                {
-                                    "function": "add2sim_one_time_transaction",
-                                    "kwargs": {
-                                        "src_account_name": "myself",
-                                        "dest_account_name": "bank",
-                                        "transaction_name": "Refinancing Cost",
-                                        "amount": 2000,
-                                        "transaction_date": "01/01/2026",
-                                    },
-                                },
-                                {
-                                    "function": "add2sim_sell_house",
-                                    "kwargs": {
-                                        "seller_account_name": "myself",
-                                        "house_val_account_name": "house",
-                                        "market_account_name": "housing_market",
-                                        "sell_closing_cost": 6000,
-                                        "sell_date": "01/01/2030",
-                                    },
-                                },
-                            ],
-                        },
-                        "Renting": {
-                            "account_names": {
-                                "myself": 0,
-                            },
-                            "variables": {},
-                            "actions": [
-                                {
-                                    "function": "add2sim_recurring_transaction",
-                                    "kwargs": {
-                                        "src_account_name": "myself",
-                                        "dest_account_name": "landlord",
-                                        "transaction_name": "Rent Payment",
-                                        "amount": 1300,
-                                        "start_date": "01/01/2024",
-                                        "end_date": "01/01/2030",
-                                        "periodicity": "monthly",
-                                    },
-                                }
-                            ],
-                        },
-                    },
-                }
+                data = private.my_scenario
 
-                # st.session_state.sim_config = data
-                # st.session_state.sims = Sim.get_sims_from_config(data)
-                # for sim in st.session_state.sims:
-                #     sim.run()
+                st.session_state.sim_config = data
+                st.session_state.sims = Sim.get_sims_from_config(data)
+                for sim in st.session_state.sims:
+                    sim.run()
                 if "sims" in st.session_state and st.session_state.sims is not None:
                     sim_options = [sim.name for sim in st.session_state.sims]
                     sel_sim_names = st.multiselect(
@@ -468,7 +369,8 @@ def main():
                                         if row["to"] in selected_columns
                                         or row["from"] in selected_columns
                                     )
-                                    + f"<br><b><i> NET DELTA: </i></b>${x.loc[x['to'].isin(selected_columns) | x['from'].isin(selected_columns), 'amt_mod'].sum():,.2f}"
+                                    + f"<br><b><i> DELTA: </i></b>${x.loc[x['to'].isin(selected_columns) | x['from'].isin(selected_columns), 'amt_mod'].sum():,.2f}"
+                                    + f"<br><b><i> NET TOTAL: </i></b>${x['total'].iloc[-1]:,.2f}"
                                 )
                             )
                             fig.add_trace(

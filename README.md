@@ -2,22 +2,47 @@
 
 ## Description
 
-A calculator for simulating financial decisions and comparing different options and projecting future outcomes. Mainly for comparing differing housing options such as buying or renting and allowing one to incorporate as many variables as possible to make the most informed decision.
+This tool allows one to understand and project certain financial decisions into the future.
+This is typically relevant for financial decisions that pertain to decisions that have some upfront cost and recurring costs but has some expected return.
+
+Main features include:
+
+- Utilizes an LLM to translate user requests/decisions into simulation setup
+  - Allows for LLM to explain/fill in values that the user might not be familiar with
+- Visualization of recurring transactions and its impact on tracked accounts
+  - Comparision of different financial decisions
+- (goal) Sufficient flexibility for more details to be factored into the simulation
+
+## Tool Usage
+
+1. Go to the hosted website
+2. Ask the LLM questions/requests on financial decisions to model
+3. See output, revise as needed
+
+## Framework Usage
+
+The framework is based on tracking Accounts and Actions.
+Accounts hold balances (like your bank account, other people, banks, value of a house, value of assets, investments)
+Actions can be made to add recurring transfers between different accounts, simulating what happens in the real world
+For example:
+
+- Investment growth means that the "market account" is transferring x% of the "investment account" balance into the investment account.
+- Buying a house means the "buyer account" is transferring the purchase amount to the "house value"
 
 ## Installation
 
-```bash
-git clone https://github.com/toastytato/FinanceSim.git
-cd FinanceSim
-```
+How to run it on your own machine
+Install the requirements
 
-## Usage
+$ pip install -r requirements.txt
+Run the app
 
-1. Use the premade Scenarios
-2. Create your own Scenarios
-    - Insert premade Action sets
-    - Create your own Action sets
-        - Specify one-time and recurring Actions
+$ streamlit run streamlit_app.py
+
+
+
+
+
 
 ## Action Sets
 
