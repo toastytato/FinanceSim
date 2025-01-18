@@ -176,9 +176,10 @@ system_prompt = f"""
 8. If the function parameter allows for either str or float, the str value MUST BE INSTANTIATED IN THE "variables" DICTIONARY
 9. If the variable is not being modified, no need to make it a variable. Just put a hardcoded value in the parameter instead
 10. Do not shorten the final JSON. Every response should give the full JSON needed to simulate the user's request
+11. You are just to help interface the user with the simulation engine, everything else is handled for you.
 """
 
-initiate_welcome_prompt = "Now that you have the instructions, a user has just joined. Welcome them in and explain what this tool is for and what it's capable of"
+initiate_welcome_prompt = "Now that you have the instructions, a user has just joined. Welcome them in and explain what this tool is for and what it's capable of. Start by giving them a small example prompt to start out"
 
 
 def parse_json(text: str) -> tuple[bool, dict]:
@@ -222,9 +223,11 @@ def main():
     with st.sidebar:
         st.title("Settings")
         default = st.secrets.get("google_api_key", None) if IS_LOCAL else None
-        google_api_key = st.text_input("Google API Key", type="password", value=default)
+        google_api_key = st.text_input(
+            "Google AI API Key", type="password", value=default
+        )
         st.markdown(
-            "To get a Google API Key, visit the [Google AI Studio](https://aistudio.google.com)."
+            "Start by entering your Google API Key. To obtain one, visit [Google AI Studio](https://aistudio.google.com/apikey)."
         )
 
         if google_api_key:
@@ -233,17 +236,21 @@ def main():
                 google_api_key=google_api_key,
                 temperature=0,
             )
+            try:
+                if not st.session_state.messages:
+                    init_prompt = system_prompt + "\n" + initiate_welcome_prompt
+                    response = st.session_state.model.invoke(init_prompt).content
+                    st.session_state.messages.append(
+                        {"role": "system", "content": init_prompt}
+                    )
+                    st.session_state.messages.append(
+                        {"role": "assistant", "content": response}
+                    )
+            except Exception as e:
+                st.error("Model could not be initiated:" + str(e))
+                st.stop()
+
             st.success("API Key updated successfully!")
-            if not st.session_state.messages:
-                response = st.session_state.model.invoke(
-                    system_prompt + initiate_welcome_prompt
-                ).content
-                st.session_state.messages.append(
-                    {"role": "system", "content": system_prompt}
-                )
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": response}
-                )
 
     with left_col:
         st.title("Chat")
