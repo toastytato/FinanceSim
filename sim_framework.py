@@ -4,7 +4,6 @@ import pandas as pd
 import heapq as hq
 from dateutil.relativedelta import relativedelta
 import datetime
-import matplotlib.pyplot as plt
 import numpy as np
 import premade_actions
 
@@ -110,6 +109,10 @@ class Account:
 
 
 class Action:
+    """
+    Specifies the action to perform and when to perform said action
+    """
+
     deltas = {
         "yearly": relativedelta(years=1),
         "monthly": relativedelta(months=1),

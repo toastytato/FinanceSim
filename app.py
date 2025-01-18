@@ -82,20 +82,6 @@ example_json = """
         },
         "actions": [
             {
-                "function": "add2sim_get_loan", // model getting a separate loan from another lender
-                "kwargs": {
-                    "borrower_account_name": "myself",
-                    "lender_account_name": "family",
-                    "debt_account_name": "family_debt",
-                    "loan_name": "family",
-                    "loan_amount": 100e3,
-                    "loan_rate": "fam_rate_apr",
-                    "monthly_payment": 500,
-                    "start_date": "01/01/2024",
-                    "end_date": "01/01/2030",
-                },
-            },
-            {
                 "function": "add2sim_buy_house",
                 "kwargs": {
                     "mortgage_account_name": "mortgage",
