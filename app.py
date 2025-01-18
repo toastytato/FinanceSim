@@ -1,7 +1,6 @@
 import streamlit as st
 import plotly.graph_objects as go
 from langchain_google_genai import ChatGoogleGenerativeAI
-import private
 import time
 import json
 import pandas as pd
@@ -9,6 +8,10 @@ import pandas as pd
 from premade_actions import *
 from sim_framework import *
 
+IN_DEBUG = False
+
+if IN_DEBUG:
+    import private
 
 # Possible future change once you get the beta version out
 # - make Accounts and variables the same thing: variables
@@ -19,16 +22,6 @@ from sim_framework import *
 
 
 def get_function_docs():
-    """
-    generic actions to include:
-    do_onetime()
-    do_recurring()
-    get_loan()
-    refinance_loan()
-    payoff_loan()
-    buy_investment()
-    sell_investment()
-    """
     functions = [
         add2sim_buy_house,
         add2sim_rent,
@@ -178,7 +171,7 @@ system_prompt = f"""
 1. You are a financial adviser that uses the available tools to create simulation scenarios that matches the user's requests
 2. Use the following add2sim functions and match its parameters as kwargs (IGNORE THE "sim:" PARAMETER IN THE FUNCTION DOCS):
 {get_function_docs()}
-3. The JSON schema you return for setting up the scenarios must follow this structure:
+3. This is an example JSON schema to follow:
 ```
 {example_json}
 ```
@@ -224,29 +217,45 @@ def parse_json(text: str) -> tuple[bool, dict]:
 def main():
     st.set_page_config(layout="wide")
     st.title("Financial Advisor")
-
     # Initialize session state
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "sim_config" not in st.session_state:
         st.session_state.sim_config = None
     if "model" not in st.session_state:
-        st.session_state.model = ChatGoogleGenerativeAI(
-            model="gemini-1.5-flash",
-            google_api_key=private.google_api_key,
-            temperature=0,
-        )
-        response = st.session_state.model.invoke(
-            system_prompt + "JUST CONFIRM YOU UNDERSTAND, DO NOT GIVE JSON"
-        ).content
-        st.session_state.messages.append({"role": "system", "content": system_prompt})
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        st.session_state.model = None
 
     user_input = st.chat_input("Let's chat!")
 
     left_col, right_col = st.columns(
         2, gap="small", border=True, vertical_alignment="bottom"
     )
+    with st.sidebar:
+        st.title("Settings")
+        default = private.google_api_key if IN_DEBUG else None
+        google_api_key = st.text_input("Google API Key", type="password", value=default)
+        st.markdown(
+            "To get a Google API Key, visit the [Google AI Studio](https://studio.ai.google.com/)."
+        )
+
+        if google_api_key:
+            st.session_state.model = ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash",
+                google_api_key=google_api_key,
+                temperature=0,
+            )
+            st.success("API Key updated successfully!")
+            if not st.session_state.messages:
+                response = st.session_state.model.invoke(
+                    system_prompt + "JUST CONFIRM YOU UNDERSTAND, DO NOT GIVE JSON"
+                ).content
+                st.session_state.messages.append(
+                    {"role": "system", "content": system_prompt}
+                )
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": response}
+                )
+
     with left_col:
         st.title("Chat")
         # Create a container with fixed height for chat history
@@ -259,7 +268,7 @@ def main():
                     st.markdown(message["content"])
 
         # User input
-        if user_input:
+        if user_input and st.session_state.model:
             # Add user message to chat history
             with chat_container:
                 with st.chat_message("user"):
@@ -304,10 +313,11 @@ def main():
             st.subheader("Plot")
             try:
                 # Sim Debug configs
-                data = private.my_scenario
+                if IN_DEBUG:
+                    data = private.my_scenario
+                    st.session_state.sim_config = data
+                    st.session_state.sims = Sim.get_sims_from_config(data)
 
-                st.session_state.sim_config = data
-                st.session_state.sims = Sim.get_sims_from_config(data)
                 for sim in st.session_state.sims:
                     sim.run()
                 if "sims" in st.session_state and st.session_state.sims is not None:
