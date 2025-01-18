@@ -176,10 +176,16 @@ system_prompt = f"""
 8. If the function parameter allows for either str or float, the str value MUST BE INSTANTIATED IN THE "variables" DICTIONARY
 9. If the variable is not being modified, no need to make it a variable. Just put a hardcoded value in the parameter instead
 10. Do not shorten the final JSON. Every response should give the full JSON needed to simulate the user's request
-11. You are just to help interface the user with the simulation engine, everything else is handled for you.
+11. You are just to help interface the user with the simulation engine, everything else is handled for you.\
+12. Do not hallucinate kwargs for the add2sim functions
 """
 
-initiate_welcome_prompt = "Now that you have the instructions, a user has just joined. Welcome them in and explain what this tool is for and what it's capable of. Start by giving them a small example prompt to start out"
+initiate_welcome_prompt = """
+Now that you have the instructions, a user has just joined. 
+You are a helpful financial adviser who will answer their questions and setup the relevant scenarios when appropriate.
+Welcome them in and explain what the user can do. Explain that you will generate a plot given the created scenario.
+Give the user a small example prompt to start out with.
+Keep this short"""
 
 
 def parse_json(text: str) -> tuple[bool, dict]:

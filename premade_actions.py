@@ -112,7 +112,7 @@ def add2sim_buy_house(
 
     # Create interest transaction for reference in principal calculation
     interest_trx = Action(
-        name="interest payment",
+        name="interest",
         action=lambda this: buyer_acc.transfer_to(
             lender_acc,
             amt=abs(mortgage_debt_acc.balance) * sim.get_value(loan_rate) / 12,
@@ -148,7 +148,7 @@ def add2sim_buy_house(
             start=buy_event.date,
         ),
         Action(
-            name="initial loan interest",
+            name="initial interest",
             action=lambda this: buyer_acc.transfer_to(lender_acc, amt=initial_interest),
             start=next_month,
             periodicity="once",
@@ -156,7 +156,7 @@ def add2sim_buy_house(
         # Monthly transactions
         interest_trx,
         Action(
-            name="principal payoff",
+            name="principal",
             action=lambda this: buyer_acc.transfer_to(
                 mortgage_debt_acc,
                 amt=min(
