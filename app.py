@@ -10,6 +10,7 @@ from sim_framework import *
 
 IN_DEBUG = st.secrets.get("USE_DEBUG", False)
 IS_LOCAL = st.secrets.get("IS_LOCAL", False)
+SHARE_API = st.secrets.get("SHARE_API", False)
 
 if IS_LOCAL:
     import private
@@ -232,10 +233,15 @@ def main():
     )
     with st.sidebar:
         st.title("Settings")
-        default = st.secrets.get("google_api_key", None) if IS_LOCAL else None
-        google_api_key = st.text_input(
-            "Google AI API Key", type="password", value=default
-        )
+        if SHARE_API:
+            default = "DON'T WORRY ABOUT IT I GOTCHU"
+            st.text_input("Google AI API Key", value=default)
+            google_api_key = st.secrets.get("google_api_key", None)
+        else:
+            default = st.secrets.get("google_api_key", None) if IS_LOCAL else None
+            google_api_key = st.text_input(
+                "Google AI API Key", type="password", value=default
+            )
         st.markdown(
             "Start by entering your Google API Key. To obtain one, visit [Google AI Studio](https://aistudio.google.com/apikey)."
         )
