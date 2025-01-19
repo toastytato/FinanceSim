@@ -187,7 +187,7 @@ You are a helpful financial adviser who will answer their questions and setup th
 Welcome them in and explain what the user can do (give a variety of example prompts, some which are comparisons). 
 Explain that a plot will be generated on the right column after you've created the setup.
 Select one of the prompts you gave and then create the JSON setup associated to that prompt and do NOT say here's the json
-Afterwards, ask the user to try prompting you with a generic question or simply to make up a scenario for them.
+Afterwards, ask the user to try prompting you with a some questions or to make up a scenario for them.
 Keep this short"""
 
 
@@ -237,7 +237,7 @@ def main():
     with st.sidebar:
         st.title("How-to Guide")
         howto = """
-        This tool uses a language model to help with financial simulations. 
+        Dang, finance terms can be so confusing sometimes. Worry not, this tool lets you use conversational language to setup all the financial simulation details needed.
         You can ask it to simulate buying a house, compare it to renting, and then see its future financial projections in the right column. 
         Just chat with it to get personalized advice!
         """
