@@ -8,6 +8,8 @@ import pandas as pd
 from premade_actions import *
 from sim_framework import *
 
+st.set_page_config(page_title="FinSim", layout="centered")
+
 USE_DEBUG = st.secrets.get("USE_DEBUG", False)
 IS_LOCAL = st.secrets.get("IS_LOCAL", False)
 SHARE_API = st.secrets.get("SHARE_API", False)
@@ -218,7 +220,6 @@ def trim_code_blocks(text: str) -> str:
 
 
 def main():
-    st.set_page_config(layout="wide")
     st.title("Financial Advisor")
     # Initialize session state
     if "messages" not in st.session_state:
@@ -313,10 +314,12 @@ def main():
                         st.session_state.sims = Sim.get_sims_from_config(
                             st.session_state.sim_config
                         )
-                        for sim in st.session_state.sims:
-                            sim.run()
+                        with st.spinner("Running sims..."):
+                            for sim in st.session_state.sims:
+                                sim.run()
 
-                        plot_data()
+                        with st.spinner("Plotting results..."):
+                            plot_data()
 
                         post_code_block_text = full_response.split("```")[-1]
                         st.markdown(post_code_block_text)
@@ -370,15 +373,7 @@ def display_llm_stream(llm_streamer):
 
 def plot_data():
     if "sims" in st.session_state and st.session_state.sims:
-        sim_options = [sim.name for sim in st.session_state.sims]
-        sel_sim_names = st.multiselect(
-            "Select scenarios to compare:",
-            options=sim_options,
-            default=sim_options,
-        )
-        desired_sims = [
-            sim for sim in st.session_state.sims if sim.name in sel_sim_names
-        ]
+        desired_sims = st.session_state.sims
 
         all_columns = set()
         for sim in desired_sims:
