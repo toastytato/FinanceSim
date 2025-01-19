@@ -231,9 +231,7 @@ def main():
     user_input = st.chat_input("Let's chat!")
     is_system = False
 
-    left_col, right_col = st.columns(
-        2, gap="small", border=True, vertical_alignment="bottom"
-    )
+    # Remove the two-column layout and just use a single column
     with st.sidebar:
         st.title("How-to Guide")
         howto = """
@@ -241,6 +239,12 @@ def main():
         You can ask it to simulate buying a house, compare it to renting, and then see its future financial projections in the right column. 
         Just chat with it to get personalized advice!
         """
+        howto = """
+        "Unlock the power of advanced financial simulations with our AI-driven tool. 
+        Whether you're buying a house, renting, refinancing loans, or planning any financial decision, our tool models complex scenarios and projects future outcomes. 
+        Simply describe your situation, and it generates detailed simulations and interactive plots, helping you make informed decisions with confidence. 
+        Perfect for anyone looking to visualize and optimize their financial future."""
+
         st.markdown(howto)
         st.title("Settings")
         if SHARE_API:
@@ -273,20 +277,146 @@ def main():
 
             st.success("API Key updated successfully!")
 
-    with left_col:
+    # Replace the left_col with a single container
+    chat_container = st.container(border=False)
+
+    with chat_container:
         st.title("Chat")
-        # Create a container with fixed height for chat history
-        chat_container = st.container(border=False)
+        # Display chat history
+        start_msg_idx = 0 if USE_DEBUG else 1
+        for message in st.session_state.messages[start_msg_idx:]:
+            with st.chat_message(message["role"]):
+                st.markdown(trim_code_blocks(message["content"]))
+                # If this is an assistant message and we have valid simulation data, show the plot
+                if (
+                    message["role"] == "assistant"
+                    and "sims" in st.session_state
+                    and st.session_state.sims
+                ):
+                    sim_options = [sim.name for sim in st.session_state.sims]
+                    sel_sim_names = st.multiselect(
+                        "Select scenarios to compare:",
+                        options=sim_options,
+                        default=sim_options,
+                    )
+                    desired_sims = [
+                        sim
+                        for sim in st.session_state.sims
+                        if sim.name in sel_sim_names
+                    ]
 
-        # Display chat history in scrollable container
-        with chat_container:
-            # show system prompt only when in debug
-            start_msg_idx = 0 if USE_DEBUG else 1
-            for message in st.session_state.messages[start_msg_idx:]:
-                with st.chat_message(message["role"]):
-                    st.markdown(trim_code_blocks(message["content"]))
+                    all_columns = set()
+                    for sim in desired_sims:
+                        all_columns.update(sim.ledger.columns[5:])
+                    selected_columns = st.multiselect(
+                        "Select accounts to aggregate:",
+                        options=list(all_columns),
+                        default=list(all_columns),
+                    )
 
-        # User input
+                    if selected_columns:
+                        try:
+                            fig = go.Figure(layout=dict(height=600))
+                            for sim in desired_sims:
+                                df = sim.ledger.copy()
+                                df["total"] = df[
+                                    df.columns.intersection(selected_columns)
+                                ].sum(axis=1)
+
+                                def calculate_amt_mod(row, selected_columns):
+                                    if (
+                                        row["from"] in selected_columns
+                                        and row["to"] in selected_columns
+                                    ):
+                                        # if the money is going "from" a tracked account "to" a tracked account, net difference is 0
+                                        return 0
+                                    elif row["from"] in selected_columns:
+                                        # if money is leaving "from" a tracked account, net difference is the -amt
+                                        return -row["amt"]
+                                    else:
+                                        # if money is going "to" a tracked account, net difference is the amt
+                                        return row["amt"]
+
+                                df["amt_mod"] = df.apply(
+                                    calculate_amt_mod,
+                                    axis=1,
+                                    selected_columns=selected_columns,
+                                )
+                                df["annotations"] = df["date"].map(
+                                    df.groupby("date").apply(
+                                        lambda x: "<br>".join(
+                                            f"<b>• {row['name']}: </b>${row['amt_mod']:,.2f}"
+                                            for _, row in x.sort_values(
+                                                by="amt_mod", ascending=False
+                                            ).iterrows()
+                                            if row["to"] in selected_columns
+                                            or row["from"] in selected_columns
+                                        )
+                                        + f"<br><b><i> DELTA: </i></b>${x.loc[x['to'].isin(selected_columns) | x['from'].isin(selected_columns), 'amt_mod'].sum():,.2f}"
+                                        + f"<br><b><i> NET TOTAL: </i></b>${x['total'].iloc[-1]:,.2f}"
+                                    )
+                                )
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=df.date,
+                                        y=df.total,
+                                        mode="lines+markers",
+                                        line=dict(dash="dot"),
+                                        line_shape="hv",
+                                        marker=dict(symbol="circle"),
+                                        name=f"<b><u>{sim.name}</u></b>",  # Make the title bold and underlined
+                                        hovertemplate="<br>%{customdata[0]}",
+                                        customdata=df[["annotations"]].values,
+                                        textfont=dict(size=50),  # Increase text size
+                                    )
+                                )
+                                first_day, first_day_total = list(
+                                    df[df["date"] == df["date"].min()].iloc[-1][
+                                        ["date", "total"]
+                                    ]
+                                )
+                                last_day, last_day_total = list(
+                                    df[df["date"] == df["date"].max()].iloc[-1][
+                                        ["date", "total"]
+                                    ]
+                                )
+
+                                fig.add_trace(
+                                    go.Scatter(
+                                        x=[first_day, last_day],
+                                        y=[first_day_total, last_day_total],
+                                        mode="lines",
+                                        line=dict(color="red", width=2, dash="dash"),
+                                        name="Start to End Line",
+                                        hoverinfo="skip",
+                                    )
+                                )
+
+                            fig.update_layout(
+                                xaxis_title="Date",
+                                yaxis_title="Net Total ($)",
+                                title={
+                                    "text": "Timeline",
+                                    "x": 0.5,
+                                    "xanchor": "center",
+                                },
+                                hovermode="x unified",
+                                legend=dict(
+                                    orientation="h",
+                                    yanchor="bottom",
+                                    y=-0.3,
+                                    xanchor="center",
+                                    x=0.5,
+                                ),
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+
+                            with st.popover("See the Generated Config"):
+                                st.json(st.session_state.sim_config, expanded=10)
+                        except Exception as e:
+                            st.error(f"Error displaying plot: {str(e)}")
+
+        # User input handling
         if user_input and st.session_state.model:
             # Add user message to chat history
             if not is_system or USE_DEBUG:
@@ -350,170 +480,6 @@ def main():
                 )
                 for sim in st.session_state.sims:
                     sim.run()
-
-    # Right column always shows the latest JSON data if available
-    with right_col:
-        plot_tab, config_data_tab = st.tabs(["Plot", "Generated Config"])
-
-        with plot_tab:
-            st.subheader("Plot")
-            try:
-                # Sim Debug configs
-                if USE_DEBUG and IS_LOCAL:
-                    data = private.my_scenario
-                    st.session_state.sim_config = data
-                    st.session_state.sims = Sim.get_sims_from_config(data)
-
-                    for sim in st.session_state.sims:
-                        sim.run()
-                if "sims" in st.session_state and st.session_state.sims is not None:
-                    sim_options = [sim.name for sim in st.session_state.sims]
-                    sel_sim_names = st.multiselect(
-                        "Select scenarios to compare:",
-                        options=sim_options,
-                        default=sim_options,
-                    )
-                    desired_sims = [
-                        sim
-                        for sim in st.session_state.sims
-                        if sim.name in sel_sim_names
-                    ]
-
-                    # get the unique give me accounts in all scenarios, and make it available for selection
-                    all_columns = set()
-                    for sim in desired_sims:
-                        all_columns.update(sim.ledger.columns[5:])
-                    selected_columns = st.multiselect(
-                        "Select accounts to aggregate:",
-                        options=list(all_columns),
-                        default=list(all_columns),
-                    )
-                    if selected_columns:
-                        fig = go.Figure(layout=dict(width=800, height=800))
-                        for sim in desired_sims:
-                            df = sim.ledger.copy()
-                            df["total"] = df[
-                                df.columns.intersection(selected_columns)
-                            ].sum(axis=1)
-
-                            def calculate_amt_mod(row, selected_columns):
-                                if (
-                                    row["from"] in selected_columns
-                                    and row["to"] in selected_columns
-                                ):
-                                    # if the money is going "from" a tracked account "to" a tracked account, net difference is 0
-                                    return 0
-                                elif row["from"] in selected_columns:
-                                    # if money is leaving "from" a tracked account, net difference is the -amt
-                                    return -row["amt"]
-                                else:
-                                    # if money is going "to" a tracked account, net difference is the amt
-                                    return row["amt"]
-
-                            df["amt_mod"] = df.apply(
-                                calculate_amt_mod,
-                                axis=1,
-                                selected_columns=selected_columns,
-                            )
-                            df["annotations"] = df["date"].map(
-                                df.groupby("date").apply(
-                                    lambda x: "<br>".join(
-                                        f"<b>• {row['name']}: </b>${row['amt_mod']:,.2f}"
-                                        for _, row in x.sort_values(
-                                            by="amt_mod", ascending=False
-                                        ).iterrows()
-                                        if row["to"] in selected_columns
-                                        or row["from"] in selected_columns
-                                    )
-                                    + f"<br><b><i> DELTA: </i></b>${x.loc[x['to'].isin(selected_columns) | x['from'].isin(selected_columns), 'amt_mod'].sum():,.2f}"
-                                    + f"<br><b><i> NET TOTAL: </i></b>${x['total'].iloc[-1]:,.2f}"
-                                )
-                            )
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=df.date,
-                                    y=df.total,
-                                    mode="lines+markers",
-                                    line=dict(dash="dot"),
-                                    line_shape="hv",
-                                    marker=dict(symbol="circle"),
-                                    name=f"<b><u>{sim.name}</u></b>",  # Make the title bold and underlined
-                                    hovertemplate="<br>%{customdata[0]}",
-                                    customdata=df[["annotations"]].values,
-                                    textfont=dict(size=50),  # Increase text size
-                                )
-                            )
-                            first_day, first_day_total = list(
-                                df[df["date"] == df["date"].min()].iloc[-1][
-                                    ["date", "total"]
-                                ]
-                            )
-                            last_day, last_day_total = list(
-                                df[df["date"] == df["date"].max()].iloc[-1][
-                                    ["date", "total"]
-                                ]
-                            )
-
-                            fig.add_trace(
-                                go.Scatter(
-                                    x=[first_day, last_day],
-                                    y=[first_day_total, last_day_total],
-                                    mode="lines",
-                                    line=dict(color="red", width=2, dash="dash"),
-                                    name="Start to End Line",
-                                    hoverinfo="skip",
-                                )
-                            )
-
-                        fig.update_layout(
-                            xaxis_title="Date",
-                            yaxis_title="Net Total ($)",
-                            title={
-                                "text": "Timeline",
-                                "x": 0.5,
-                                "xanchor": "center",
-                            },
-                            hovermode="x unified",
-                            legend=dict(
-                                orientation="h",
-                                yanchor="bottom",
-                                y=-0.3,
-                                xanchor="center",
-                                x=0.5,
-                            ),
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.write("No columns selected for plotting")
-                else:
-                    st.write("No plot data available")
-            except Exception as e:
-                st.error(f"Error displaying plot: {str(e)}")
-
-        with config_data_tab:
-            st.subheader("Config Data")
-            if (
-                "sim_config" in st.session_state
-                and st.session_state.sim_config is not None
-            ):
-                st.json(st.session_state.sim_config, expanded=10)
-                # st.markdown(
-                #     f"```json {json.dumps(st.session_state.sim_config, indent=2)}"
-                # )
-            else:
-                st.write("No JSON data available")
-
-        # with df_output_tab:
-        #     st.subheader("DF Output")
-        #     if (
-        #         "sims" in st.session_state
-        #         and st.session_state.sims is not None
-        #     ):
-        #         for i, df in enumerate(st.session_state.sims):
-        #             st.write(f"Simulation {i+1}")
-        #             st.dataframe(df)
-        #     else:
-        #         st.write("No DataFrame data available")
 
 
 if __name__ == "__main__":
