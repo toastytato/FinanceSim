@@ -197,7 +197,6 @@ def add2sim_sell_house(
     Args:
         sim (Sim): The simulation object managing accounts and actions
         seller_account_name (str): Account name of the seller (e.g., "myself")
-        buyer_account_name (str): Account name of the buyer (e.g., "Alice")
         house_val_account_name (str): House asset account (e.g., "mountain_view_house")
         market_account_name (str): Market forces (e.g., "housing_market")
         sell_closing_cost (Union[str, float]): Selling closing costs (e.g., 5000)

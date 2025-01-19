@@ -27,6 +27,7 @@ if IS_LOCAL:
 def get_function_docs():
     functions = [
         add2sim_buy_house,
+        add2sim_sell_house,
         add2sim_rent,
         add2sim_one_time_transaction,
         add2sim_recurring_transaction,
@@ -171,7 +172,7 @@ system_prompt = f"""
 - You are outputting in Markdown (but don't respond starting in ```), so all dollar signs be written like \$
 - Use PascalCase for the variable names, but snake_case for the function calls
 5. After creating the JSON, summarize each of the scenarios you created
-6. The account names should just track values associated with the current user's net worth, nobody else.
+6. **The account names should just track values associated with the current user's net worth (the user, their assets and debts/liabilities), nobody else**.
 7. Variables should only be created if the user asks to modify some value halfway into the sim. Otherwise the add2sim premade functions will handle hardcoded values as indicated in the docs
 8. If the function parameter allows for either str or float, the str value MUST BE INSTANTIATED IN THE "variables" DICTIONARY
 9. If the variable is not being modified, no need to make it a variable. Just put a hardcoded value in the parameter instead
@@ -234,7 +235,7 @@ def main():
     with st.sidebar:
         st.title("Settings")
         if SHARE_API:
-            default = "DON'T WORRY ABOUT IT I GOTCHU"
+            default = "don't worry bout it i gotchu"
             st.text_input("Google AI API Key", value=default)
             google_api_key = st.secrets.get("google_api_key", None)
         else:
@@ -303,19 +304,20 @@ def main():
                                 word_split = word.split("```")
                                 if in_code_block:
                                     response_text_trimmed += word_split[0] + " "
-                                    code_block += word_split[1] + " "
+                                    code_block += "```json " + word_split[1] + " "
                                 else:
                                     # Code block ended, display it in a popover
-                                    code_block += word_split[0] + " "
+                                    code_block += word_split[0] + "```"
                                     response_text_trimmed += word_split[1] + " "
                                     response_container.markdown(response_text_trimmed)
-                                    with st.popover("Generated Configs"):
-                                        st.markdown(f"```` {code_block}")
-                                continue
-                            if in_code_block:
-                                code_block += word + " "
+                                    with st.popover("Generated JSON Config"):
+                                        st.markdown(f"{code_block}")
+                                        # st.json(parse_json(code_block)[1])
                             else:
-                                response_text_trimmed += word + " "
+                                if in_code_block:
+                                    code_block += word + " "
+                                else:
+                                    response_text_trimmed += word + " "
                         if IN_DEBUG:
                             response_container.markdown(response_text)
                         else:
