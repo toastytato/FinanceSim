@@ -184,8 +184,9 @@ system_prompt = f"""
 initiate_welcome_prompt = """
 Now that you have the instructions, a user has just joined. 
 You are a helpful financial adviser who will answer their questions and setup the relevant scenarios when appropriate.
-Welcome them in and explain what the user can do. Explain that you will generate a plot given the created scenario.
-Give the user a small example prompt, and then create the JSON associated to that prompt without saying here's the json
+Welcome them in and explain what the user can do (give a variety of example prompts, some which are comparisons). 
+Explain that a plot will be generated on the right column after you've created the setup.
+Select one of the prompts you gave and then create the JSON setup associated to that prompt and do NOT say here's the json
 Afterwards, ask the user to try prompting you with a generic question or simply to make up a scenario for them.
 Keep this short"""
 
@@ -234,6 +235,13 @@ def main():
         2, gap="small", border=True, vertical_alignment="bottom"
     )
     with st.sidebar:
+        st.title("How-to Guide")
+        howto = """
+        This tool uses a language model to help with financial simulations. 
+        You can ask it to simulate buying a house, compare it to renting, and then see its future financial projections in the right column. 
+        Just chat with it to get personalized advice!
+        """
+        st.markdown(howto)
         st.title("Settings")
         if SHARE_API:
             default = "don't worry bout it i gotchu"
@@ -314,7 +322,7 @@ def main():
                                     code_block += word_split[0] + "```"
                                     response_text_trimmed += word_split[1] + " "
                                     response_container.markdown(response_text_trimmed)
-                                    with st.popover("Generated JSON Config"):
+                                    with st.popover("See the Generated Config"):
                                         st.markdown(f"{code_block}")
                                         # st.json(parse_json(code_block)[1])
                             else:
