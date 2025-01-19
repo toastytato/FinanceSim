@@ -14,6 +14,7 @@ IS_LOCAL = st.secrets.get("IS_LOCAL", False)
 if IS_LOCAL:
     import private
 
+
 # Possible future change once you get the beta version out
 # - make Accounts and variables the same thing: variables
 # - Give them subtypes so that it can be specified
@@ -163,20 +164,18 @@ system_prompt = f"""
 {example_json}
 ```
 4. Each scenario must be completely self-contained with ALL necessary actions
-- If comparing "Buy House" vs "Buy House + Roommate", the second scenario must include both the house purchase AND the roommate actions
 - Never rely on actions from other scenarios
 - Any kwargs with a suffix of "_varname" MUST be a variable name that is defined in the variables section
 - A start and end date MUST be provided for each scenario
 - You are outputting in Markdown (but don't respond starting in ```), so all dollar signs be written like \$
 - Use PascalCase for the variable names, but snake_case for the function calls
-- DO NOT PUT COMMENTS IN THE JSON
 5. After creating the JSON, summarize each of the scenarios you created
-6. The account names should just track the user, their assets, and their liabilities. No one else
+6. The account names should just track values associated with the current user's net worth, nobody else.
 7. Variables should only be created if the user asks to modify some value halfway into the sim. Otherwise the add2sim premade functions will handle hardcoded values as indicated in the docs
 8. If the function parameter allows for either str or float, the str value MUST BE INSTANTIATED IN THE "variables" DICTIONARY
 9. If the variable is not being modified, no need to make it a variable. Just put a hardcoded value in the parameter instead
 10. Do not shorten the final JSON. Every response should give the full JSON needed to simulate the user's request
-11. You are just to help interface the user with the simulation engine, everything else is handled for you.\
+11. You are just to help interface the user with the simulation engine, everything else is handled for you.
 12. Do not hallucinate kwargs for the add2sim functions
 """
 
@@ -184,7 +183,8 @@ initiate_welcome_prompt = """
 Now that you have the instructions, a user has just joined. 
 You are a helpful financial adviser who will answer their questions and setup the relevant scenarios when appropriate.
 Welcome them in and explain what the user can do. Explain that you will generate a plot given the created scenario.
-Give the user a small example prompt to start out with.
+Give the user a small example prompt, and then create the JSON associated to that prompt without saying here's the json
+Afterwards, ask the user to try prompting you with a generic question or simply to make up a scenario for them.
 Keep this short"""
 
 
@@ -207,7 +207,11 @@ def parse_json(text: str) -> tuple[bool, dict]:
 
     except Exception as e:
         print(e)
-        return False, {}
+        return False, None
+
+
+def trim_code_blocks(text: str) -> str:
+    return "\n".join(part for i, part in enumerate(text.split("```")) if i % 2 == 0)
 
 
 def main():
@@ -236,22 +240,16 @@ def main():
             "Start by entering your Google API Key. To obtain one, visit [Google AI Studio](https://aistudio.google.com/apikey)."
         )
 
-        if google_api_key:
+        if google_api_key and not st.session_state.model:
             st.session_state.model = ChatGoogleGenerativeAI(
                 model="gemini-1.5-flash",
                 google_api_key=google_api_key,
                 temperature=0,
             )
+            user_input = system_prompt + "\n" + initiate_welcome_prompt
+
             try:
-                if not st.session_state.messages:
-                    init_prompt = system_prompt + "\n" + initiate_welcome_prompt
-                    response = st.session_state.model.invoke(init_prompt).content
-                    st.session_state.messages.append(
-                        {"role": "system", "content": init_prompt}
-                    )
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": response}
-                    )
+                st.session_state.model.invoke("hi").content
             except Exception as e:
                 st.error("Model could not be initiated:" + str(e))
                 st.stop()
@@ -265,10 +263,11 @@ def main():
 
         # Display chat history in scrollable container
         with chat_container:
+            # show system prompt only when in debug
             start_msg_idx = 0 if IN_DEBUG else 1
             for message in st.session_state.messages[start_msg_idx:]:
                 with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
+                    st.markdown(trim_code_blocks(message["content"]))
 
         # User input
         if user_input and st.session_state.model:
@@ -282,13 +281,39 @@ def main():
             response_streamer = st.session_state.model.stream(st.session_state.messages)
             # Stream assistant response
             response_text = ""
+            response_text_trimmed = ""
+
             with chat_container:
                 with st.chat_message("assistant"):
                     response_container = st.empty()
+                    in_code_block = False
+                    code_block = ""
                     for chunk in response_streamer:
                         for word in chunk.content.split(" "):
                             response_text += word + " "
-                        response_container.markdown(response_text)
+                            if "```" in word:
+                                in_code_block = not in_code_block
+                                # sometimes the LLM combines other words with the delimiter
+                                word_split = word.split("```")
+                                if in_code_block:
+                                    response_text_trimmed += word_split[0] + " "
+                                    code_block += word_split[1] + " "
+                                else:
+                                    # Code block ended, display it in a popover
+                                    code_block += word_split[0] + " "
+                                    response_text_trimmed += word_split[1] + " "
+                                    response_container.markdown(response_text_trimmed)
+                                    with st.popover("Generated Configs"):
+                                        st.markdown(f"```` {code_block}")
+                                continue
+                            if in_code_block:
+                                code_block += word + " "
+                            else:
+                                response_text_trimmed += word + " "
+                        if IN_DEBUG:
+                            response_container.markdown(response_text)
+                        else:
+                            response_container.markdown(response_text_trimmed)
                         time.sleep(0.02)
 
             # Add assistant response to chat history
@@ -308,7 +333,7 @@ def main():
 
     # Right column always shows the latest JSON data if available
     with right_col:
-        plot_tab, config_data_tab = st.tabs(["Plot", "Config Data"])
+        plot_tab, config_data_tab = st.tabs(["Plot", "Generated Config"])
 
         with plot_tab:
             st.subheader("Plot")
@@ -451,7 +476,10 @@ def main():
                 "sim_config" in st.session_state
                 and st.session_state.sim_config is not None
             ):
-                st.json(st.session_state.sim_config, expanded=5)
+                st.json(st.session_state.sim_config, expanded=10)
+                # st.markdown(
+                #     f"```json {json.dumps(st.session_state.sim_config, indent=2)}"
+                # )
             else:
                 st.write("No JSON data available")
 
