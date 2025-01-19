@@ -181,6 +181,7 @@ system_prompt = f"""
 10. Do not shorten the final JSON. Every response should give the full JSON needed to simulate the user's request
 11. You are just to help interface the user with the simulation engine, everything else is handled for you.
 12. Do not hallucinate kwargs for the add2sim functions
+13. If the user request cannot be accomplished with the given functions, let them know and do not generate the scenarios
 """
 
 initiate_welcome_prompt = """
@@ -191,6 +192,26 @@ Explain that a plot will be generated on the right column after you've created t
 Select one of the prompts you gave and then create the JSON setup associated to that prompt and do NOT say here's the json
 Afterwards, ask the user to try prompting you with a some questions or to make up a scenario for them.
 Keep this short"""
+
+
+howto_guide = """
+Dang, finance terms can be so confusing sometimes. Worry not, this flexible tool lets AI translate your anticipated financial decisions to be run through a simulation.
+You can ask it to:
+
+ - simulate buying a house
+ - compare different interest rates and upfront costs
+ - refinance the house few years in
+ - model recurring expenses you have
+ - (eventually) opportunity costs of different investments
+
+You can see how your net worth (cash + assets + liabilities) will evolve over time in the plot.
+Just chat with it to get personalized advice!
+"""
+# howto_guide = """
+# Unlock the power of advanced financial simulations with our AI-driven tool.
+# Whether you're buying a house, renting, refinancing loans, or planning any financial decision, our tool models complex scenarios and projects future outcomes.
+# Simply describe your situation, and it generates detailed simulations and interactive plots, helping you make informed decisions with confidence.
+# Perfect for anyone looking to visualize and optimize their financial future."""
 
 
 def parse_json(text: str) -> tuple[bool, dict]:
@@ -235,18 +256,8 @@ def main():
     # Remove the two-column layout and just use a single column
     with st.sidebar:
         st.title("How-to Guide")
-        howto = """
-        Dang, finance terms can be so confusing sometimes. Worry not, this tool lets you use conversational language to setup all the financial simulation details needed.
-        You can ask it to simulate buying a house, compare it to renting, and then see its future financial projections in the right column. 
-        Just chat with it to get personalized advice!
-        """
-        # howto = """
-        # Unlock the power of advanced financial simulations with our AI-driven tool.
-        # Whether you're buying a house, renting, refinancing loans, or planning any financial decision, our tool models complex scenarios and projects future outcomes.
-        # Simply describe your situation, and it generates detailed simulations and interactive plots, helping you make informed decisions with confidence.
-        # Perfect for anyone looking to visualize and optimize their financial future."""
+        st.markdown(howto_guide)
 
-        st.markdown(howto)
         st.title("Settings")
         if SHARE_API:
             default = "don't worry bout it i gotchu"
