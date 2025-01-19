@@ -8,7 +8,7 @@ import pandas as pd
 from premade_actions import *
 from sim_framework import *
 
-IN_DEBUG = st.secrets.get("USE_DEBUG", False)
+USE_DEBUG = st.secrets.get("USE_DEBUG", False)
 IS_LOCAL = st.secrets.get("IS_LOCAL", False)
 SHARE_API = st.secrets.get("SHARE_API", False)
 
@@ -228,6 +228,7 @@ def main():
         st.session_state.model = None
 
     user_input = st.chat_input("Let's chat!")
+    is_system = False
 
     left_col, right_col = st.columns(
         2, gap="small", border=True, vertical_alignment="bottom"
@@ -254,6 +255,7 @@ def main():
                 temperature=0,
             )
             user_input = system_prompt + "\n" + initiate_welcome_prompt
+            is_system = True
 
             try:
                 st.session_state.model.invoke("hi").content
@@ -271,7 +273,7 @@ def main():
         # Display chat history in scrollable container
         with chat_container:
             # show system prompt only when in debug
-            start_msg_idx = 0 if IN_DEBUG else 1
+            start_msg_idx = 0 if USE_DEBUG else 1
             for message in st.session_state.messages[start_msg_idx:]:
                 with st.chat_message(message["role"]):
                     st.markdown(trim_code_blocks(message["content"]))
@@ -279,9 +281,11 @@ def main():
         # User input
         if user_input and st.session_state.model:
             # Add user message to chat history
-            with chat_container:
-                with st.chat_message("user"):
-                    st.markdown(user_input)
+            if not is_system or USE_DEBUG:
+                # don't show system prompt when in production
+                with chat_container:
+                    with st.chat_message("user"):
+                        st.markdown(user_input)
             st.session_state.messages.append({"role": "user", "content": user_input})
 
             # Invoke the model with the system message and user input
@@ -318,7 +322,7 @@ def main():
                                     code_block += word + " "
                                 else:
                                     response_text_trimmed += word + " "
-                        if IN_DEBUG:
+                        if USE_DEBUG:
                             response_container.markdown(response_text)
                         else:
                             response_container.markdown(response_text_trimmed)
@@ -347,7 +351,7 @@ def main():
             st.subheader("Plot")
             try:
                 # Sim Debug configs
-                if IN_DEBUG and IS_LOCAL:
+                if USE_DEBUG and IS_LOCAL:
                     data = private.my_scenario
                     st.session_state.sim_config = data
                     st.session_state.sims = Sim.get_sims_from_config(data)
