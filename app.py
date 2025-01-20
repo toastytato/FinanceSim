@@ -182,6 +182,7 @@ system_prompt = f"""
 11. You are just to help interface the user with the simulation engine, everything else is handled for you.
 12. Do not hallucinate kwargs for the add2sim functions
 13. If the user request cannot be accomplished with the given functions, let them know and do not generate the scenarios
+14. If you are making a comparison, each one will need its own scenario
 """
 
 initiate_welcome_prompt = """
@@ -202,6 +203,7 @@ You can ask it to:
  - simulate buying a house
  - compare different interest rates and upfront costs
  - refinance the house few years in
+ - compare buying vs renting
  - model recurring expenses you have
  - (eventually) opportunity costs of different investments
 
@@ -215,30 +217,47 @@ Just chat with it to get personalized advice!
 # Perfect for anyone looking to visualize and optimize their financial future."""
 
 
-def parse_json(text: str) -> tuple[bool, dict]:
-    """Extract content between triple backticks and parse as JSON.
-    Returns (success, parsed_json)"""
-    try:
-        # Split by triple backticks and get the content
-        parts = text.split("```")
-        if len(parts) < 3:
-            return False, {}
+# def parse_json(text: str) -> tuple[bool, dict]:
+#     """Extract content between triple backticks and parse as JSON.
+#     Returns (success, parsed_json)"""
+#     try:
+#         # Split by triple backticks and get the content
+#         parts = text.split("```")
+#         if len(parts) < 3:
+#             return False, {}
 
-        # Get the content and clean it
-        json_text = parts[1].replace("json", "").replace(" ", "")
-        # Remove comments that start with //
-        json_text = "\n".join(line.split("//")[0] for line in json_text.split("\n"))
+#         # Get the content and clean it
+#         json_text = parts[1].replace("json", "").replace(" ", "")
+#         # Remove comments that start with //
+#         json_text = "\n".join(line.split("//")[0] for line in json_text.split("\n"))
 
-        # Parse JSON and return it directly
-        return True, json.loads(json_text)
+#         # Parse JSON and return it directly
+#         return True, json.loads(json_text)
 
-    except Exception as e:
-        print(e)
-        return False, None
+#     except Exception as e:
+#         print(e)
+#         return False, None
 
 
-def trim_code_blocks(text: str) -> str:
-    return "\n".join(part for i, part in enumerate(text.split("```")) if i % 2 == 0)
+# def trim_code_blocks(text: str) -> str:
+#     return "\n".join(part for i, part in enumerate(text.split("```")) if i % 2 == 0)
+
+
+def parse_response(response):
+    precode_text = ""
+    code_text = ""
+    postcode_text = ""
+    if "```" not in response:
+        precode_text = response
+    else:
+        # split the start of the code block
+        split = response.split("```json")
+        precode_text = split[0]
+        # split the end of the code block
+        code_text = split[1].split("```")[0]
+        postcode_text = split[1].split("```")[1]
+
+    return precode_text, code_text, postcode_text
 
 
 def main():
@@ -291,35 +310,12 @@ def main():
             st.success("API Key updated successfully!")
 
     # Replace the left_col with a single container
-    chat_container = st.container(border=False)
+    chat_container = st.container(border=True)
 
     with chat_container:
         st.title("Chat")
         # Display chat history
-        start_msg_idx = 0 if USE_DEBUG else 1
-        for message in st.session_state.messages[start_msg_idx:]:
-            with st.chat_message(message["role"]):
-                if message["role"] == "user":
-                    st.markdown(message["content"])
-                elif message["role"] == "assistant":
-                    # if we are updating that chat NOT from a user input
-                    if message == st.session_state.messages[-1]:
-                        if not user_input:
-                            # if simply redrawing the last message
-                            if "```" in message["content"]:
-                                pre_code_block_text = message["content"].split("```")[0]
-                                post_code_block_text = message["content"].split("```")[
-                                    -1
-                                ]
-                                st.markdown(pre_code_block_text)
-                                plot_data()
-                                st.markdown(post_code_block_text)
-                            else:
-                                st.markdown(trim_code_blocks(message["content"]))
-                        else:
-                            st.markdown(trim_code_blocks(message["content"]))
-                    else:
-                        st.markdown(trim_code_blocks(message["content"]))
+        display_chat_history(user_input)
 
         # only executed when there is a new entry from the user
         # displays the response in realtime from the LLM API
@@ -333,73 +329,115 @@ def main():
             # Invoke the model with the system message and user input
             llm_streamer = st.session_state.model.stream(st.session_state.messages)
 
+            sims = []
             with st.chat_message("assistant"):
                 full_response = display_llm_stream(llm_streamer)
                 # Add responses to chat history
-                st.session_state.messages.append(
-                    {"role": "assistant", "content": full_response}
-                )
-
-                is_valid, data = parse_json(full_response)
+                pre, code, post = parse_response(full_response)
                 # the response contains setup code for the simulation
-                if is_valid:
+                # pre is displayed during the display_llm_stream
+
+                try:
+                    data = json.loads(code)
+                except Exception as e:
+                    st.text(code)
+                    data = {}
+
+                if code:
+
                     with st.spinner("Running sims..."):
                         st.session_state.sim_config = data
                         st.session_state.sims = Sim.get_sims_from_config(
                             st.session_state.sim_config
                         )
+                        sim = st.session_state.sims
                         for sim in st.session_state.sims:
                             sim.run()
 
                     with st.spinner("Plotting results..."):
-                        plot_data()
+                        plot_sim_data()
 
-                    post_code_block_text = full_response.split("```")[-1]
-                    st.markdown(post_code_block_text)
+                if post:
+                    post_code_text = ""
+                    post_container = st.empty()
+                    for word in post.split(" "):
+                        post_code_text += word + " "
+                        post_container.markdown(post_code_text)
+                        time.sleep(0.01)
+
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": full_response}
+                )
+
+
+def display_chat_history(user_input):
+    start_msg_idx = 0 if USE_DEBUG else 1
+    for message in st.session_state.messages[start_msg_idx:]:
+        is_latest = message == st.session_state.messages[-1]
+        with st.chat_message(message["role"]):
+            if message["role"] == "user":
+                st.markdown(message["content"])
+            elif message["role"] == "assistant":
+                # if we are updating that chat NOT from a user input
+                pre, code, post = parse_response(message["content"])
+                st.markdown(pre)
+                if code:
+                    if is_latest and not user_input:
+                        plot_sim_data()
+                        st.markdown(post)
+                    else:
+                        with st.popover("See Generated Code"):
+                            st.json(code)
+                        st.markdown(post)
 
 
 def display_llm_stream(llm_streamer):
+    # parses what the LLM is saying in real-time
+
     pre_code_response_container = st.empty()
 
     in_code_block = False
 
     # Stream assistant response
-    response_text = ""
-    response_text_trimmed = ""
-    code_block = ""
+    full_response_text = ""
+    pre_code_response = ""
 
-    for chunk in llm_streamer:
+    while not in_code_block:
+        chunk = next(llm_streamer, None)
+        if not chunk:
+            break
+        full_response_text += chunk.content
+
+        # parse word by word
         for word in chunk.content.split(" "):
-            response_text += word + " "
             if "```" in word:
-                in_code_block = not in_code_block
                 # sometimes the LLM combines other words with the delimiter
-                word_split = word.split("```")
+                in_code_block = True
+                code_delimiter_word = word.split("```")
                 if in_code_block:
-                    response_text_trimmed += word_split[0] + " "
-                    code_block += "```json " + word_split[1] + " "
-                else:
-                    # Code block ended, display it in a popover
-                    code_block += word_split[0] + "```"
-                    response_text_trimmed += word_split[1] + " "
-                    pre_code_response_container.markdown(response_text_trimmed)
+                    pre_code_response += code_delimiter_word[0]
+                break
             else:
-                if in_code_block:
-                    code_block += word + " "
-                else:
-                    response_text_trimmed += word + " "
+                pre_code_response += word + " "
 
-        pre_code_block_text = response_text.split("```")[0]
         if USE_DEBUG:
-            pre_code_response_container.markdown(response_text)
+            pre_code_response_container.text(full_response_text)
         else:
-            pre_code_response_container.markdown(pre_code_block_text)
+            pre_code_response_container.markdown(pre_code_response)
+
         time.sleep(0.02)
 
-    return response_text
+    # get the remaining response from the stream after parsing the code part
+    with st.spinner("Parsing setup..."):
+        for chunk in llm_streamer:
+            full_response_text += chunk.content
+            if USE_DEBUG:
+                pre_code_response_container.text(full_response_text)
+
+    return full_response_text
 
 
-def plot_data():
+def plot_sim_data():
     if "sims" in st.session_state and st.session_state.sims:
         desired_sims = st.session_state.sims
 
