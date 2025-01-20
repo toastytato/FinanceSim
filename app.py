@@ -187,15 +187,16 @@ system_prompt = f"""
 initiate_welcome_prompt = """
 Now that you have the instructions, a user has just joined. 
 You are a helpful financial adviser who will answer their questions and setup the relevant scenarios when appropriate.
-Welcome them in and explain what the user can do (give a variety of example prompts, some which are comparisons). 
-Explain that a plot will be generated on the right column after you've created the setup.
-Select one of the prompts you gave and then create the JSON setup associated to that prompt and do NOT say here's the json
-Afterwards, ask the user to try prompting you with a some questions or to make up a scenario for them.
+1. Welcome them in and explain what the user can do (give a variety of example prompts, some which are comparisons). 
+2. Select one of the prompts you gave and then create the simulation setup in JSON
+    - assume the json will be replaced by a plot, so do NOT say here's the json
+3. List out the values you chose and tie it back to the context of the request. Assume the user does not see the json you just generated and keep it concise
+4. Ask the user to try modifying the config in general terms, make up a scenario for them, or just ask you general finance questions.
 Keep this short"""
 
 
 howto_guide = """
-Dang, finance terms can be so confusing sometimes. Worry not, this flexible tool lets AI translate your anticipated financial decisions to be run through a simulation.
+Dang, personal finance terms can be so confusing sometimes. Worry not, this flexible tool lets AI translate your anticipated financial decisions to be run through a simulation.
 You can ask it to:
 
  - simulate buying a house
@@ -282,7 +283,7 @@ def main():
             is_system = True
 
             try:
-                st.session_state.model.invoke("hi").content
+                response = st.session_state.model.invoke("hi").content
             except Exception as e:
                 st.error("Model could not be initiated:" + str(e))
                 st.stop()
@@ -298,47 +299,63 @@ def main():
         start_msg_idx = 0 if USE_DEBUG else 1
         for message in st.session_state.messages[start_msg_idx:]:
             with st.chat_message(message["role"]):
-                st.markdown(trim_code_blocks(message["content"]))
-                # If this is an assistant message and we have valid simulation data, show the plot
+                if message["role"] == "user":
+                    st.markdown(message["content"])
+                elif message["role"] == "assistant":
+                    # if we are updating that chat NOT from a user input
+                    if message == st.session_state.messages[-1]:
+                        if not user_input:
+                            # if simply redrawing the last message
+                            if "```" in message["content"]:
+                                pre_code_block_text = message["content"].split("```")[0]
+                                post_code_block_text = message["content"].split("```")[
+                                    -1
+                                ]
+                                st.markdown(pre_code_block_text)
+                                plot_data()
+                                st.markdown(post_code_block_text)
+                            else:
+                                st.markdown(trim_code_blocks(message["content"]))
+                        else:
+                            st.markdown(trim_code_blocks(message["content"]))
+                    else:
+                        st.markdown(trim_code_blocks(message["content"]))
 
-        # Executes when the user submits their request
+        # only executed when there is a new entry from the user
+        # displays the response in realtime from the LLM API
         if user_input and st.session_state.model:
-            # Add user message to chat history
+            # don't show system prompt when in production
             if not is_system or USE_DEBUG:
-                # don't show system prompt when in production
-                with chat_container:
-                    with st.chat_message("user"):
-                        st.markdown(user_input)
+                with st.chat_message("user"):
+                    st.markdown(user_input)
             st.session_state.messages.append({"role": "user", "content": user_input})
 
             # Invoke the model with the system message and user input
             llm_streamer = st.session_state.model.stream(st.session_state.messages)
 
-            with chat_container:
-                with st.chat_message("assistant"):
-                    full_response = display_llm_stream(llm_streamer)
-                    # Check for JSON in response and store in session state
-                    is_valid, data = parse_json(full_response)
-                    # the response contains setup code for the simulation
-                    if is_valid:
+            with st.chat_message("assistant"):
+                full_response = display_llm_stream(llm_streamer)
+                # Add responses to chat history
+                st.session_state.messages.append(
+                    {"role": "assistant", "content": full_response}
+                )
+
+                is_valid, data = parse_json(full_response)
+                # the response contains setup code for the simulation
+                if is_valid:
+                    with st.spinner("Running sims..."):
                         st.session_state.sim_config = data
                         st.session_state.sims = Sim.get_sims_from_config(
                             st.session_state.sim_config
                         )
-                        with st.spinner("Running sims..."):
-                            for sim in st.session_state.sims:
-                                sim.run()
+                        for sim in st.session_state.sims:
+                            sim.run()
 
-                        with st.spinner("Plotting results..."):
-                            plot_data()
+                    with st.spinner("Plotting results..."):
+                        plot_data()
 
-                        post_code_block_text = full_response.split("```")[-1]
-                        st.markdown(post_code_block_text)
-
-                    # Add assistant response to chat history
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": full_response}
-                    )
+                    post_code_block_text = full_response.split("```")[-1]
+                    st.markdown(post_code_block_text)
 
 
 def display_llm_stream(llm_streamer):
@@ -478,6 +495,7 @@ def plot_data():
                         "xanchor": "center",
                     },
                     hovermode="x unified",
+                    dragmode="pan",
                     legend=dict(
                         orientation="h",
                         yanchor="bottom",
