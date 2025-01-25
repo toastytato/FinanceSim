@@ -34,6 +34,7 @@ def get_function_docs():
         add2sim_one_time_transaction,
         add2sim_recurring_transaction,
         add2sim_modify_variable,
+        add2sim_get_loan,
     ]
     # Return formatted string of function names and their docstrings
     function_docs = ""
@@ -169,7 +170,9 @@ Assume the system you're in will replace the JSON with the simulation output, so
 You are outputting in markdown, so all dollar signs should be written like \$
 The account names must only track accounts relevant to the user's net worth
 When you make a change, do NOT refer back to the specific configuration implementation you have generated
-Every scenario in the list of scenarios must be fully self contained. Do not combine different scenarios into one
+Every comparison must have multiple scenarios, so there should be multiple entries under "scenarios"
+Put a debt_, asset_, cash_, or other_ under the account names corresponding to each
+Do not create empty scenarios, every one must be fully filled out with the appropriate details corresponding to the user's request
 """
 
 # other = """
@@ -252,6 +255,16 @@ def main():
     if "model" not in st.session_state:
         st.session_state.model = None
 
+    # Replace the left_col with a single container
+    left_col, right_col = st.columns(2, vertical_alignment="bottom")
+    with left_col:
+        chat_container = st.container(border=True)
+    with right_col:
+        test_container = st.container(border=True)
+
+    with test_container:
+        plot_tab, _ = st.tabs(["Plot", " "])
+
     chat_input = st.chat_input("Let's chat!")
     is_system = False
 
@@ -291,13 +304,6 @@ def main():
 
             st.success("API Key updated successfully!")
 
-    # Replace the left_col with a single container
-    left_col, right_col = st.columns(2, vertical_alignment="bottom")
-    with left_col:
-        chat_container = st.container(border=True)
-    with right_col:
-        test_container = st.container(border=True, height=730)
-
     with chat_container:
         st.title("Chat")
         # Display chat history
@@ -326,8 +332,18 @@ def main():
                 # pre is displayed during the display_llm_stream
 
                 if code:
+                    with st.expander("Generated Config:"):
+                        config_input = st.text_area(
+                            "Modify the configuration setup if desired:",
+                            value=code,
+                            height=400,
+                        )
+                        rerun = st.button("Update Plot")
+                        if rerun:
+                            with st.spinner("Running sims..."):
+                                run_sims()
                     try:
-                        data = json.loads(code)
+                        data = json.loads(config_input)
                     except Exception as e:
                         # bad code was generated
                         st.error(e)
@@ -340,11 +356,14 @@ def main():
                 if data:
                     with st.spinner("Running sims..."):
                         st.session_state.sim_config = data
+                        run_sims()
 
-                    with st.spinner("Plotting results..."):
-                        # plot_sim_data(1)
-                        with st.popover("See the Generated Config"):
-                            st.json(st.session_state.sim_config)
+                # always make sure the plot is shown even when conversation doesn't ask for sim
+                with st.spinner("Plotting results..."):
+                    with plot_tab:
+                        plot_sim_data(1)
+                    # with st.popover("See the Generated Config"):
+                    #     st.json(st.session_state.sim_config)
 
                 if post:
                     post_code_text = ""
@@ -353,23 +372,10 @@ def main():
                         post_code_text += word + " "
                         post_container.markdown(post_code_text)
                         time.sleep(0.01)
-
-    with test_container:
-        config_tab, plot_tab = st.tabs(["Configs", "Plot"])
-        with config_tab:
-            config_input = st.text_area(
-                "Configs",
-                value=json.dumps(st.session_state.sim_config, indent=2),
-                height=550,
-            )
-            st.session_state.sim_config = json.loads(config_input)
-
-            rerun = st.button("Update Plot")
-            if rerun:
-                with st.spinner("Running sims..."):
-                    run_sims()
-        with plot_tab:
-            plot_sim_data(3)
+        else:
+            # make sure that if we're simply refreshing the page, make sure the plot is being shown
+            with plot_tab:
+                plot_sim_data(1)
 
 
 def run_sims():
@@ -399,11 +405,30 @@ def display_chat_history(chat_input):
                         # occurs when the screen gets refreshsed
                         # and we're redrawing last output NOT triggered by user input
                         # plot_sim_data(2)
-                        pass
+                        with st.expander("Generated Config:"):
+                            config_input = st.text_area(
+                                "Modify the configuration setup if desired:",
+                                value=code,
+                                height=400,
+                            )
+                            st.session_state.sim_config = json.loads(config_input)
+
+                            if st.button("Update Plot"):
+                                with st.spinner("Running sims..."):
+                                    run_sims()
                     else:
-                        with st.popover("See Generated Code"):
-                            st.json(code)
+                        with st.expander("Generated Config:"):
+                            config_input = st.text_area(
+                                "Modify the configuration setup if desired: (Disabled, please edit the most recent response)",
+                                value=code,
+                                height=400,
+                                disabled=True,
+                            )
                     st.markdown(post)
+
+        # if not chat_input:
+        #     with plot_tab:
+        #         plot_sim_data(5)
 
 
 def display_llm_stream(llm_streamer):
@@ -467,7 +492,7 @@ def plot_sim_data(key):
             "Select accounts to aggregate:",
             options=list(all_columns),
             default=list(all_columns),
-            key=f"multisel{key}",
+            key=f"multiselect{key}",
         )
 
         if selected_columns:

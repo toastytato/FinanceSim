@@ -225,10 +225,10 @@ class Sim:
     @classmethod
     def get_sim_from_scenario(cls, scenario_name: str, scenario_data: Dict):
         sim = cls(scenario_name)
-        for account_name, starting_amt in scenario_data["account_names"].items():
-            sim.create_account(account_name, amt=starting_amt)
+        for account_name, init_amt in scenario_data.get("account_names", {}).items():
+            sim.create_account(account_name, amt=init_amt)
 
-        for var_name, var_value in scenario_data["variables"].items():
+        for var_name, var_value in scenario_data.get("variables", {}).items():
             sim.vars[var_name] = var_value
 
         for action in scenario_data["actions"]:
