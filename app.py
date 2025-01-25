@@ -34,7 +34,7 @@ def get_function_docs():
         add2sim_one_time_transaction,
         add2sim_recurring_transaction,
         add2sim_modify_variable,
-        add2sim_get_loan,
+        # add2sim_get_loan,
     ]
     # Return formatted string of function names and their docstrings
     function_docs = ""
@@ -42,8 +42,6 @@ def get_function_docs():
         function_docs += f"### {func.__name__}\n{func.__doc__}\n\n"
     return function_docs
 
-
-container_height = 495
 
 example_json = """
 "scenarios": {              # List of scenarios to compare
@@ -172,7 +170,10 @@ The account names must only track accounts relevant to the user's net worth
 When you make a change, do NOT refer back to the specific configuration implementation you have generated
 Every comparison must have multiple scenarios, so there should be multiple entries under "scenarios"
 Put a debt_, asset_, cash_, or other_ under the account names corresponding to each
-Do not create empty scenarios, every one must be fully filled out with the appropriate details corresponding to the user's request
+Do not create empty scenarios, every one must have account_names and actions
+Make sure to follow proper JSON syntax guidelines
+Do not allow eval operations inside the params
+Focus solely on the change in net worth resulting from each choice
 """
 
 # other = """
@@ -240,7 +241,9 @@ def parse_response(response):
         postcode_text = split[1].split("```")[1]
 
     # Remove comments that start with //
-    code_text = "\n".join([line.split("//")[0] for line in code_text.split("\n")])
+    code_text = "\n".join(
+        [line.split("//")[0] for line in code_text.split("\n")]
+    ).strip()
 
     return precode_text, code_text, postcode_text
 
@@ -261,9 +264,6 @@ def main():
         chat_container = st.container(border=True)
     with right_col:
         test_container = st.container(border=True)
-
-    with test_container:
-        plot_tab, _ = st.tabs(["Plot", " "])
 
     chat_input = st.chat_input("Let's chat!")
     is_system = False
@@ -307,11 +307,12 @@ def main():
     with chat_container:
         st.title("Chat")
         # Display chat history
-        display_chat_history(chat_input)
 
         # only executed when there is a new entry from the user
         # displays the response in realtime from the LLM API
         if chat_input and st.session_state.model:
+            display_chat_history(show_latest=True)
+
             # don't show system prompt when in production
             if not is_system or USE_DEBUG:
                 with st.chat_message("user"):
@@ -332,22 +333,13 @@ def main():
                 # pre is displayed during the display_llm_stream
 
                 if code:
-                    with st.expander("Generated Config:"):
-                        config_input = st.text_area(
-                            "Modify the configuration setup if desired:",
-                            value=code,
-                            height=400,
-                        )
-                        rerun = st.button("Update Plot")
-                        if rerun:
-                            with st.spinner("Running sims..."):
-                                run_sims()
+                    # config_input = show_and_get_latest_llm_configs(code)
+
                     try:
-                        data = json.loads(config_input)
+                        data = json.loads(code)
                     except Exception as e:
                         # bad code was generated
                         st.error(e)
-                        st.code(code)
                         data = None
                 else:
                     # just a normal response without code
@@ -358,10 +350,10 @@ def main():
                         st.session_state.sim_config = data
                         run_sims()
 
-                # always make sure the plot is shown even when conversation doesn't ask for sim
-                with st.spinner("Plotting results..."):
-                    with plot_tab:
-                        plot_sim_data(1)
+                    # always make sure the plot is shown even when conversation doesn't ask for sim
+                    # with st.spinner("Plotting results..."):
+                    #     with plot_tab:
+                    #         plot_sim_data(1)
                     # with st.popover("See the Generated Config"):
                     #     st.json(st.session_state.sim_config)
 
@@ -372,10 +364,52 @@ def main():
                         post_code_text += word + " "
                         post_container.markdown(post_code_text)
                         time.sleep(0.01)
+            st.rerun()
         else:
-            # make sure that if we're simply refreshing the page, make sure the plot is being shown
+            display_chat_history(show_latest=False)
+
+            # display latest response
+            # make sure that when we're simply refreshing the page, make sure the plot is being shown
+            messages = st.session_state.messages[1:]
+            if len(messages) > 1:
+                with st.chat_message("user"):
+                    st.text(messages[-2]["content"])
+
+            with st.chat_message("assistant"):
+                # if we are updating that chat NOT from a user input
+                pre, code, post = parse_response(messages[-1]["content"])
+                st.markdown(pre)
+                if code:
+                    show_and_get_latest_llm_configs(code)
+                    st.markdown(post)
+
+        with test_container:
+            plot_tab, _ = st.tabs(["Plot", " "])
             with plot_tab:
                 plot_sim_data(1)
+
+
+def show_and_get_latest_llm_configs(code):
+    with st.expander("Generated Config:"):
+        if st.checkbox("Edit:"):
+            config_input = st.text_area(
+                "Modify the configuration setup if desired:",
+                value=code,
+                height=400,
+                key=1,
+            )
+        else:
+            with st.container(height=400, border=False):
+                st.code(code, line_numbers=True, language="json")
+            config_input = code
+        rerun = st.button("Update Plot")
+        st.session_state.sim_config = json.loads(config_input)
+
+        if rerun:
+            with st.spinner("Running sims..."):
+                run_sims()
+
+    return config_input
 
 
 def run_sims():
@@ -385,14 +419,22 @@ def run_sims():
         sim.run()
 
 
-def display_chat_history(chat_input):
+def display_chat_history(show_latest=True):
     start_msg_idx = 0 if USE_DEBUG else 1
-    if USE_DEBUG:
-        all_msgs = st.session_state.messages
+
+    if show_latest:
+        stop = None
     else:
-        all_msgs = st.session_state.messages[1:][-6:]
-    for message in all_msgs:
-        is_latest = message == st.session_state.messages[-1]
+        stop = -2
+    if USE_DEBUG:
+        all_msgs = st.session_state.messages[:stop]
+        start = None
+    else:
+        all_msgs = st.session_state.messages[1:][:stop]
+        start = None
+
+    # ignore the latest responses
+    for message in all_msgs[start:]:
         with st.chat_message(message["role"]):
             if message["role"] == "user":
                 st.text(message["content"])
@@ -401,34 +443,14 @@ def display_chat_history(chat_input):
                 pre, code, post = parse_response(message["content"])
                 st.markdown(pre)
                 if code:
-                    if is_latest and not chat_input:
-                        # occurs when the screen gets refreshsed
-                        # and we're redrawing last output NOT triggered by user input
-                        # plot_sim_data(2)
-                        with st.expander("Generated Config:"):
-                            config_input = st.text_area(
-                                "Modify the configuration setup if desired:",
-                                value=code,
-                                height=400,
-                            )
-                            st.session_state.sim_config = json.loads(config_input)
-
-                            if st.button("Update Plot"):
-                                with st.spinner("Running sims..."):
-                                    run_sims()
-                    else:
-                        with st.expander("Generated Config:"):
-                            config_input = st.text_area(
-                                "Modify the configuration setup if desired: (Disabled, please edit the most recent response)",
-                                value=code,
-                                height=400,
-                                disabled=True,
-                            )
+                    with st.expander("Generated Config:"):
+                        st.text_area(
+                            "Modify the configuration setup if desired: (Disabled, please edit the most recent response)",
+                            value=code,
+                            height=400,
+                            disabled=True,
+                        )
                     st.markdown(post)
-
-        # if not chat_input:
-        #     with plot_tab:
-        #         plot_sim_data(5)
 
 
 def display_llm_stream(llm_streamer):
