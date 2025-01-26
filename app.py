@@ -161,16 +161,16 @@ example_json = """
 system_prompt = f"""
 You are a financial adviser with access to simulation tools to fulfill the user's requests
 Use the following add2sim functions and match its parameters as kwargs (IGNORE THE "sim:" PARAMETER IN THE FUNCTION DOCS): {get_function_docs()}
-Do not hallcuinate or make up functions nor kwargs
+Do not hallucinate or make up functions nor kwargs
 This is an example JSON schema to follow: ```{example_json}```
 You will respond to the user to answer their questions, and if the context makes sense create a JSON code block to create the simulation setup
-Assume the system you're in will replace the JSON with the simulation output, so do not refer to the JSON. Simply refer to it as the simulation output
+When you create your JSON, assume the user will not see it and that a plot will be generated to elsewhere in the tool. Refer to the output as such.
 You are outputting in markdown, so all dollar signs should be written like \$
 The account names must only track accounts relevant to the user's net worth
 When you make a change, do NOT refer back to the specific configuration implementation you have generated
 Every comparison must have multiple scenarios, so there should be multiple entries under "scenarios"
 Put a debt_, asset_, cash_, or other_ under the account names corresponding to each
-Do not create empty scenarios, every one must have account_names and actions
+Do not create empty scenarios, every one must have fully filled out account_names and actions
 Make sure to follow proper JSON syntax guidelines
 Do not allow eval operations inside the params
 Focus solely on the change in net worth resulting from each choice
@@ -199,8 +199,8 @@ initiate_welcome_prompt = """
 Now that you have the instructions, a user has just joined. 
 You are a helpful financial adviser who will answer their questions and setup the relevant scenarios when appropriate.
 1. Welcome them in and explain what the user can do (give a variety of example prompts, some which are comparisons). 
-2. Select one of the prompts you gave and then create the simulation setup following the schema shown previously. Say you are generating the simulation setup
-3. Summarize the values you chose and tie it back to the context of the request. Use bullet points
+2. Select one of the prompts you gave and then create the simulation setup following the schema shown previously. Always generate the full setup, do not show snippets
+3. Summarize the values you chose and tie it back to the context of the request. Format it using Markdown so that it follows a hierachical structure
 4. Ask the user to try modifying the config in general terms, make up a scenario for them, or just ask you general finance questions.
 Keep this short"""
 
@@ -265,7 +265,9 @@ def main():
     with right_col:
         test_container = st.container(border=True)
 
-    chat_input = st.chat_input("Let's chat!")
+    chat_input = st.chat_input(
+        "Ask me to generate a scenario or comparison of financial decisions..."
+    )
     is_system = False
 
     # Remove the two-column layout and just use a single column
@@ -431,7 +433,7 @@ def display_chat_history(show_latest=True):
         start = None
     else:
         all_msgs = st.session_state.messages[1:][:stop]
-        start = None
+        start = -6
 
     # ignore the latest responses
     for message in all_msgs[start:]:
@@ -444,12 +446,8 @@ def display_chat_history(show_latest=True):
                 st.markdown(pre)
                 if code:
                     with st.expander("Generated Config:"):
-                        st.text_area(
-                            "Modify the configuration setup if desired: (Disabled, please edit the most recent response)",
-                            value=code,
-                            height=400,
-                            disabled=True,
-                        )
+                        with st.container(height=400, border=False):
+                            st.code(code, language="json")
                     st.markdown(post)
 
 
